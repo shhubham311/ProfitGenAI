@@ -1,45 +1,49 @@
-import pandas as pd
-import numpy as np
+import pickle
 import faiss
-from sentence_transformers import SentenceTransformer
+import pandas as pd
+import os
 from src.config import config
 
 class ContentEngine:
-    def __init__(self, products_df: pd.DataFrame):
-        self.df = products_df
-        self.model = SentenceTransformer(config.EMBEDDING_MODEL)
+    def __init__(self, products_df=None):
+        # Note: products_df arg is kept for compatibility but ignored
         self.index = None
-        self.mapping = []
-        self._build_index()
+        self.df = None
+        self._load_artifacts()
 
-    def _build_index(self):
-        print("Generating Embeddings...")
-        self.df['search_text'] = (
-            self.df['title'].fillna('') + " " + 
-            self.df['category_name'].fillna('')
-        )
+    def _load_artifacts(self):
+        file_path = 'startups_data.pkl'
         
-        embeddings = self.model.encode(self.df['search_text'].tolist(), show_progress_bar=True)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"{file_path} not found! Did you run generate_artifacts.py?")
+            
+        print(f"Loading pre-computed artifacts from {file_path}...")
+        with open(file_path, 'rb') as f:
+            data = pickle.load(f)
+            
+        self.df = data['df']
+        embeddings = data['embeddings']
+        
+        print("Building FAISS Index...")
+        # Normalize for Cosine Similarity
         faiss.normalize_L2(embeddings)
         
         d = embeddings.shape[1]
         self.index = faiss.IndexFlatIP(d)
         self.index.add(embeddings)
-        
-        self.mapping = np.arange(len(self.df))
-        print("Vector Index Built.")
+        print("Engine Ready.")
 
     def search_by_asin(self, asin: str, k: int = 20):
-        """Finds similar products given a specific ASIN ID."""
         product_row = self.df[self.df['asin'] == asin]
         if product_row.empty:
             return pd.DataFrame()
         
+        # We need the embedding for this ASIN. 
+        # Since we pre-calculated, we can look it up by index.
         idx = product_row.index[0]
-        query_text = self.df.iloc[idx]['search_text']
         
-        query_vec = self.model.encode([query_text])
-        faiss.normalize_L2(query_vec)
+        # Reconstruct the vector from the index (FAISS allows this)
+        query_vec = self.index.reconstruct(idx).reshape(1, -1)
         
         distances, indices = self.index.search(query_vec, k + 1)
         
@@ -54,15 +58,14 @@ class ContentEngine:
         return pd.DataFrame(results)
 
     def search_by_text(self, query: str, k: int = 20):
-        """Searches products based on a natural text query."""
-        if not self.index:
-            return pd.DataFrame()
-
-        # Encode the user's text query
-        query_vec = self.model.encode([query])
+        # For text queries, we still need the model to encode the *query*
+        # But we load it strictly for this one operation, which is light on RAM
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(config.EMBEDDING_MODEL)
+        
+        query_vec = model.encode([query])
         faiss.normalize_L2(query_vec)
         
-        # Search FAISS index
         distances, indices = self.index.search(query_vec, k)
         
         results = []
