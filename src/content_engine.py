@@ -43,7 +43,7 @@ class ContentEngine:
         idx = product_row.index[0]
         
         # Reconstruct the vector from the index (FAISS allows this)
-        query_vec = self.index.reconstruct(idx).reshape(1, -1)
+        query_vec = self.index.reconstruct(int(idx)).reshape(1, -1)
         
         distances, indices = self.index.search(query_vec, k + 1)
         

@@ -5,7 +5,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 import sys
 import os
-
+# --- FIX FOR OMP ERROR #15 ---
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# -----------------------------
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -68,14 +70,29 @@ def startup_event():
     db.init_db()
     
     # 2. Load Data Models
-    products_df = DataLoader.load_amazon_catalog()
+    
+    # --- [OLD APPROACH] High Memory Usage (Commented Out) ---
+    # products_df = DataLoader.load_amazon_catalog() # <--- This caused the crash on Render
+    # clickstream_df = DataLoader.load_clickstream()
+    
+    # print("Initializing Behavior Analyzer...")
+    # behavior_analyzer = BehaviorAnalyzer(clickstream_df)
+    
+    # print("Initializing Content Engine...")
+    # content_engine = ContentEngine(products_df) # <--- Processed embeddings in RAM
+    
+    # --- [NEW APPROACH] Optimized for Render Free Tier ---
+    # We still load clickstream data as it is small and needed for rules
     clickstream_df = DataLoader.load_clickstream()
     
     print("Initializing Behavior Analyzer...")
     behavior_analyzer = BehaviorAnalyzer(clickstream_df)
     
-    print("Initializing Content Engine...")
-    content_engine = ContentEngine(products_df)
+    print("Initializing Content Engine (Loading Artifacts)...")
+    # Initialize without arguments. 
+    # This triggers the new _load_artifacts() method in ContentEngine 
+    # to read your 'startups_data.pkl' file instead of calculating in RAM.
+    content_engine = ContentEngine() 
     
     print("Initializing Sales Agent...")
     sales_agent = SalesAgent(behavior_analyzer.get_rules())
@@ -152,6 +169,7 @@ async def get_history(req: CheckoutRequest):
     enriched_history = []
     if content_engine:
         for asin in history_asins:
+            # Use content_engine.df (loaded from pickle)
             product_details = content_engine.df[content_engine.df['asin'] == asin]
             if not product_details.empty:
                 enriched_history.append({
@@ -262,6 +280,7 @@ async def search_products(req: SearchRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     # 1. Search by Text (Increased k for full results)
+    # Optimized ContentEngine handles the query encoding internally
     raw_results = content_engine.search_by_text(req.query, k=50)
     
     if raw_results.empty:
@@ -313,6 +332,7 @@ async def get_recommendation(req: RecommendationRequest):
         context_asin = user["history"][-1]
     
     # Fetch Context Product
+    # Using the pre-loaded dataframe in ContentEngine
     context_row = content_engine.df[content_engine.df['asin'] == context_asin]
     if context_row.empty:
         raise HTTPException(status_code=404, detail="Product ASIN not found")
