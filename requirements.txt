@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pandas
+numpy
+sentence-transformers
+faiss-cpu
+groq
+scikit-learn
+python-dotenv
+pydantic-settings
+jinja2
+aiofiles
+bcrypt

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartShop | Intelligent Commerce</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bs-primary: #4f46e5;
+            --bs-body-bg: #f3f4f6;
+            --sidebar-width: 400px;
+        }
+        body { font-family: 'Inter', sans-serif; overflow: hidden; background-color: var(--bs-body-bg); }
+        
+        #auth-overlay {
+            position: fixed; inset: 0; z-index: 2000;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px);
+            transition: opacity 0.3s ease;
+        }
+        #auth-overlay.hidden { opacity: 0; pointer-events: none; }
+        .auth-card { width: 100%; max-width: 400px; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); }
+
+        /* --- LAYOUT --- */
+        #app-container { display: flex; height: 100vh; opacity: 0; transition: opacity 0.5s ease; overflow: hidden; }
+        #app-container.visible { opacity: 1; }
+        
+        #store-panel { flex: 1; display: flex; flex-direction: column; background: #fff; min-width: 0; position: relative; }
+
+        /* --- FIXED SCROLLING SIDEBAR --- */
+        .sidebar-responsive {
+            background-color: #f9fafb;
+            border-left: 1px solid #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            height: 100%;   /* Force full height */
+            overflow: hidden; /* Prevent sidebar itself from scrolling, force inner scroll */
+        }
+
+        #chat-area {
+            flex: 1; /* Grow to fill space */
+            min-height: 0; /* CRITICAL: Allows flex child to scroll */
+            overflow-y: auto; /* Explicit vertical scroll */
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        @media (min-width: 992px) {
+            #assistant-panel-container { 
+                width: var(--sidebar-width); 
+                flex-shrink: 0; 
+                position: relative !important; 
+                transform: none !important; 
+                visibility: visible !important; 
+                height: 100% !important; /* Ensure container matches parent height */
+            }
+            .mobile-toggle-btn { display: none; }
+        }
+        
+        .product-card { border: 1px solid #f3f4f6; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .product-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        
+        .chat-bubble { font-size: 0.95rem; border: 1px solid #e5e7eb; background: white; word-wrap: break-word; word-break: break-word; }
+        .nav-tabs .nav-link.active { color: var(--bs-primary); border-bottom: 2px solid var(--bs-primary); background: transparent; }
+        .btn-primary { background-color: var(--bs-primary); border-color: var(--bs-primary); }
+        
+        /* Persona Badge */
+        .persona-selector { min-width: 160px; font-weight: 500; border-color: #e5e7eb; background-color: #f9fafb; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<div id="auth-overlay" class="d-flex justify-content-center align-items-center">
+    <div class="card auth-card p-4">
+        <div class="text-center mb-4">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-3 d-inline-flex p-3 mb-3">
+                <i class="bi bi-bag-check-fill fs-3"></i>
+            </div>
+            <h2 class="fw-bold">SmartShop</h2>
+            <p class="text-muted small">Sign in to start shopping</p>
+        </div>
+
+        <div id="auth-forms">
+            <form id="login-form" onsubmit="event.preventDefault(); doLogin();">
+                <div class="mb-3">
+                    <input type="email" id="auth-email" class="form-control form-control-lg fs-6" placeholder="name@company.com" required>
+                </div>
+                <div class="mb-3">
+                    <input type="password" id="auth-password" class="form-control form-control-lg fs-6" placeholder="Password" required>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" id="btn-login" class="btn btn-primary btn-lg fs-6">Sign In</button>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="#" class="text-decoration-none small text-muted" onclick="toggleAuth(false)">Create an account</a>
+                </div>
+            </form>
+
+            <form id="signup-form" style="display: none;" onsubmit="event.preventDefault(); doSignup();">
+                <div class="mb-3">
+                    <input type="email" id="signup-email" class="form-control" placeholder="Email Address" required>
+                </div>
+                <div class="mb-3">
+                    <input type="password" id="signup-password" class="form-control" placeholder="Create Password" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted fw-bold">Initial Persona</label>
+                    <select id="signup-persona" class="form-select">
+                        <option value="Standard Shopper">Standard Shopper</option>
+                        <option value="Budget Conscious">Budget Conscious</option>
+                        <option value="Premium Shopper">Premium Shopper</option>
+                    </select>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" id="btn-signup" class="btn btn-primary">Create Account</button>
+                </div>
+                <div class="text-center mt-3">
+                    <a href="#" class="text-decoration-none small text-muted" onclick="toggleAuth(true)">Back to Login</a>
+                </div>
+            </form>
+            <div id="auth-feedback" class="alert alert-danger mt-3 d-none small text-center"></div>
+        </div>
+    </div>
+</div>
+
+<div id="app-container">
+    <div id="store-panel">
+        <header class="px-3 px-md-4 py-3 border-bottom bg-white d-flex align-items-center justify-content-between sticky-top z-1">
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-bag-check-fill text-primary fs-4"></i>
+                    <h5 class="fw-bold mb-0 d-none d-md-block">SmartShop</h5>
+                </div>
+                <select id="active-persona-select" class="form-select form-select-sm persona-selector shadow-sm" onchange="changePersona()">
+                    <option value="Standard Shopper">Standard Shopper</option>
+                    <option value="Budget Conscious">Budget Conscious</option>
+                    <option value="Premium Shopper">Premium Shopper</option>
+                </select>
+            </div>
+            
+            <div class="flex-grow-1 mx-2 mx-md-4" style="max-width: 500px;">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" id="search-input" class="form-control bg-light border-start-0" placeholder="Search..." onkeypress="if(event.key==='Enter') performSearch()">
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-primary mobile-toggle-btn d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#assistant-panel-container">
+                    <i class="bi bi-chat-dots-fill"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="doLogout()">Logout</button>
+            </div>
+        </header>
+        
+        <div id="results-area" class="p-3 p-md-4 overflow-auto bg-light h-100">
+            <div class="text-center mt-5 text-muted">
+                <i class="bi bi-shop fs-1 mb-3 d-block"></i>
+                <p>Search for a product to begin shopping</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="offcanvas-lg offcanvas-end" tabindex="-1" id="assistant-panel-container">
+        <div class="offcanvas-header border-bottom d-lg-none">
+            <h5 class="offcanvas-title fw-bold">AI Assistant</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#assistant-panel-container"></button>
+        </div>
+
+        <div class="sidebar-responsive h-100 w-100 bg-light border-start">
+            <div class="nav nav-tabs nav-fill" role="tablist">
+                <button class="nav-link active" onclick="switchTab('chat')">Assistant</button>
+                <button class="nav-link" onclick="switchTab('history')">History</button>
+            </div>
+
+            <div id="chat-area" class="p-3">
+                <div class="chat-bubble p-3 rounded-3 shadow-sm border-0 bg-white">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div class="spinner-grow spinner-grow-sm text-primary" role="status"></div>
+                        <small class="fw-bold text-uppercase text-primary" style="font-size: 0.7rem;">AI Analyst</small>
+                    </div>
+                    Welcome! I'll tailor my recommendations to your selected shopping preference.
+                </div>
+            </div>
+
+            <div class="p-3 bg-white border-top shadow-lg mt-auto">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-bold text-dark">Cart Total</span>
+                    <span id="cart-total-display" class="fw-bold text-primary fs-5">$0.00</span>
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-dark" onclick="viewCart()">View Cart (<span id="cart-count">0</span>)</button>
+                    <button class="btn btn-primary" onclick="checkout()">Checkout Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="cart-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Your Cart</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cart-items-container" class="d-flex flex-column gap-2 mt-2"></div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light text-muted" data-bs-dismiss="modal">Continue Shopping</button>
+                <button type="button" class="btn btn-primary" onclick="checkout()">Checkout</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let currentUserEmail = null;
+    let currentPersona = "Standard Shopper";
+    let currentTab = 'chat';
+    let cartModal;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        cartModal = new bootstrap.Modal(document.getElementById('cart-modal'));
+    });
+
+    // --- AUTH ---
+    function toggleAuth(isLogin) {
+        document.getElementById('login-form').style.display = isLogin ? 'block' : 'none';
+        document.getElementById('signup-form').style.display = isLogin ? 'none' : 'block';
+        document.getElementById('auth-feedback').classList.add('d-none');
+    }
+
+    async function doLogin() {
+        const email = document.getElementById('auth-email').value;
+        const pass = document.getElementById('auth-password').value;
+        if(!email || !pass) return showError("Please enter email and password.");
+        
+        try {
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email, password: pass }) 
+            });
+            const data = await res.json();
+            if(!res.ok) throw new Error(data.detail);
+            
+            currentPersona = data.persona || "Standard Shopper";
+            document.getElementById('active-persona-select').value = currentPersona;
+            handleAuthSuccess(data.email);
+        } catch(e) { showError(e.message); }
+    }
+
+    async function doSignup() {
+        const email = document.getElementById('signup-email').value;
+        const pass = document.getElementById('signup-password').value;
+        const persona = document.getElementById('signup-persona').value;
+        
+        try {
+            const res = await fetch('/signup', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email, password: pass, persona })
+            });
+            const data = await res.json();
+            if(!res.ok) throw new Error(data.detail);
+            
+            currentPersona = persona;
+            document.getElementById('active-persona-select').value = currentPersona;
+            handleAuthSuccess(data.email);
+        } catch(e) { showError(e.message); }
+    }
+
+    function handleAuthSuccess(email) {
+        currentUserEmail = email;
+        document.getElementById('auth-overlay').classList.add('hidden');
+        setTimeout(() => document.getElementById('auth-overlay').style.display = 'none', 300);
+        document.getElementById('app-container').classList.add('visible');
+        updateCartUI();
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('auth-feedback');
+        el.innerText = msg;
+        el.classList.remove('d-none');
+    }
+
+    function doLogout() { location.reload(); }
+
+    // --- PERSONA ---
+    async function changePersona() {
+        const newPersona = document.getElementById('active-persona-select').value;
+        currentPersona = newPersona;
+        await fetch('/update_persona', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email: currentUserEmail, persona: newPersona })
+        });
+        const currentQuery = document.getElementById('search-input').value;
+        if (currentQuery) performSearch();
+    }
+
+    // --- SEARCH ---
+    async function performSearch() {
+        const query = document.getElementById('search-input').value;
+        if (!query) return;
+
+        const container = document.getElementById('results-area');
+        container.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Searching as ${currentPersona}...</div></div>`;
+
+        try {
+            const res = await fetch('/search', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ query, user_persona: currentPersona })
+            });
+            const data = await res.json();
+            
+            container.innerHTML = `<div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3 g-md-4"></div>`;
+            const grid = container.querySelector('.row');
+
+            if (!data.results || data.results.length === 0) {
+                container.innerHTML = `<div class="text-center mt-5 text-muted">No products found.</div>`;
+                return;
+            }
+
+            data.results.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'col';
+                card.innerHTML = `
+                    <div class="card h-100 product-card border-0 bg-white">
+                        <div class="card-body">
+                            <h6 class="card-title fw-bold mb-1 text-truncate">${p.title}</h6>
+                            <div class="text-primary fw-bold mb-3">$${p.price.toFixed(2)}</div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="addToCart('${p.asin}')">Add to Cart</button>
+                                <button class="btn btn-sm btn-primary" onclick="buyItem('${p.asin}')">Buy Now</button>
+                            </div>
+                        </div>
+                    </div>`;
+                grid.appendChild(card);
+            });
+        } catch (e) {
+            container.innerHTML = `<div class="text-danger text-center mt-5">Search failed.</div>`;
+        }
+    }
+
+    // --- CART / HISTORY / CHAT ---
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('#assistant-panel-container .nav-link').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        const container = document.getElementById('chat-area');
+        if (tab === 'history') loadHistory(container);
+        else container.innerHTML = '<div class="chat-bubble p-3 rounded-3 shadow-sm border-0 bg-white">Ready for new recommendations.</div>';
+    }
+
+    async function updateCartUI() {
+        try {
+            const res = await fetch('/get_cart', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail }) });
+            const data = await res.json();
+            const count = data.cart ? data.cart.length : 0;
+            const total = data.cart ? data.cart.reduce((s, i) => s + i.price, 0) : 0;
+            document.getElementById('cart-count').innerText = count;
+            document.getElementById('cart-total-display').innerText = `$${total.toFixed(2)}`;
+            return data.cart || [];
+        } catch (e) { return []; }
+    }
+
+    async function addToCart(asin) {
+        await fetch('/add_to_cart', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail, asin }) });
+        await updateCartUI();
+        triggerRecommendation(asin);
+    }
+    
+    async function buyItem(asin) {
+        if(confirm("Buy now?")) {
+            await fetch('/buy_item', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail, asin }) });
+            alert("Purchased!"); updateCartUI();
+        }
+    }
+
+    async function viewCart() {
+        cartModal.show();
+        const items = await updateCartUI();
+        const container = document.getElementById('cart-items-container');
+        container.innerHTML = '';
+        if(items.length===0) container.innerHTML = '<p class="text-center text-muted">Cart is empty</p>';
+        items.forEach(i => {
+            container.innerHTML += `
+            <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+                <div class="text-truncate me-2">${i.title}</div>
+                <button class="btn btn-sm text-danger" onclick="removeFromCart('${i.asin}')"><i class="bi bi-trash"></i></button>
+            </div>`;
+        });
+    }
+
+    async function removeFromCart(asin) {
+        await fetch('/remove_from_cart', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail, asin }) });
+        viewCart(); updateCartUI();
+    }
+
+    async function checkout() {
+        if(confirm("Checkout?")) {
+            await fetch('/checkout', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail }) });
+            cartModal.hide(); updateCartUI(); alert("Order Placed!");
+        }
+    }
+
+    async function loadHistory(container) {
+        const res = await fetch('/get_history', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: currentUserEmail }) });
+        const data = await res.json();
+        container.innerHTML = '';
+        if(!data.history?.length) container.innerHTML = '<p class="text-center text-muted p-3">No history.</p>';
+        data.history.forEach(h => {
+             container.innerHTML += `<div class="p-2 border-bottom"><div class="fw-bold">${h.title}</div><div class="text-success">$${h.price}</div></div>`;
+        });
+    }
+
+    async function triggerRecommendation(asin) {
+        if(currentTab !== 'chat') return;
+        const chat = document.getElementById('chat-area');
+        const id = 'rec-' + Date.now();
+        chat.innerHTML += `<div id="${id}" class="chat-bubble p-3 rounded-3 shadow-sm">Analyzing...</div>`;
+        chat.scrollTop = chat.scrollHeight; // Auto-scroll to bottom
+        
+        try {
+            const res = await fetch('/recommend', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_email: currentUserEmail, asin }) });
+            const data = await res.json();
+            
+            document.getElementById(id).innerHTML = `
+                <div class="mb-2"><i class="bi bi-lightbulb-fill text-warning"></i> ${data.sales_pitch}</div>
+                <div class="list-group">${data.recommendations.map(r => `<div class="list-group-item d-flex justify-content-between"><small class="text-truncate" style="max-width:150px">${r.title}</small><span class="badge bg-primary rounded-pill">$${r.price}</span></div>`).join('')}</div>
+            `;
+            chat.scrollTop = chat.scrollHeight; // Ensure visibility after content loads
+        } catch(e) { document.getElementById(id).remove(); }
+    }
+</script>
+</body>
+</html>

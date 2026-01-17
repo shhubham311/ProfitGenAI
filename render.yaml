@@ -1,0 +1,47 @@
+# render.yaml
+# This file configures the deployment of your ProfitGenAI application on Render.
+# To deploy, create a new "Blueprint" service on Render and connect it to your repository.
+# Render will automatically detect and use this file.
+
+services:
+  - type: web
+    name: profitgenai-service
+    # Start with the free plan. You can upgrade later as needed.
+    plan: free
+    # Use the Python runtime.
+    runtime: python
+    # Specify the Python version to match your local/Dockerfile environment.
+    envVars:
+      - key: PYTHON_VERSION
+        value: '3.10'
+      # Set the database path to the location on the persistent disk.
+      - key: DB_PATH
+        value: /var/data/profitgenai.db
+      # Set your GROQ_API_KEY as a secret in the Render dashboard.
+      # Go to Environment -> Secret Files -> Add Secret File
+      # Filename: .env
+      # Contents:
+      # GROQ_API_KEY=your_actual_api_key_here
+      - key: GROQ_API_KEY
+        # It's recommended to set the value in the Render dashboard
+        # under Environment > Environment Variables for security.
+        # This is a placeholder; Render will prompt you for a value.
+        value: ""
+
+    # Define the persistent disk for the SQLite database.
+    disks:
+      - name: data-disk
+        # Mount path for the disk inside the container.
+        mountPath: /var/data
+        # Start with 1 GB. This can be increased later.
+        sizeGB: 1
+
+    # The command to install dependencies.
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+
+    # The command to start the web service.
+    # Render automatically sets the PORT environment variable.
+    startCommand: "uvicorn src.api:app --host 0.0.0.0 --port $PORT"
+
+    # Optional: Health check to ensure the service is running correctly.
+    healthCheckPath: /
