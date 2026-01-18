@@ -6,16 +6,20 @@ from src.config import config
 
 class ContentEngine:
     def __init__(self, products_df=None):
-        # Note: products_df arg is kept for compatibility but ignored
         self.index = None
         self.df = None
+        self.model = None  # Initialize as None
         self._load_artifacts()
 
     def _load_artifacts(self):
-        file_path = 'startups_data.pkl'
+        # Robust path finding for Render
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'startups_data.pkl')
         
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"{file_path} not found! Did you run generate_artifacts.py?")
+             # Fallback check
+             file_path = 'startups_data.pkl'
+             if not os.path.exists(file_path):
+                 raise FileNotFoundError(f"Could not find startups_data.pkl in src/ or root.")
             
         print(f"Loading pre-computed artifacts from {file_path}...")
         with open(file_path, 'rb') as f:
@@ -25,7 +29,6 @@ class ContentEngine:
         embeddings = data['embeddings']
         
         print("Building FAISS Index...")
-        # Normalize for Cosine Similarity
         faiss.normalize_L2(embeddings)
         
         d = embeddings.shape[1]
@@ -38,11 +41,9 @@ class ContentEngine:
         if product_row.empty:
             return pd.DataFrame()
         
-        # We need the embedding for this ASIN. 
-        # Since we pre-calculated, we can look it up by index.
         idx = product_row.index[0]
         
-        # Reconstruct the vector from the index (FAISS allows this)
+        # FIX: Explicit int cast for FAISS
         query_vec = self.index.reconstruct(int(idx)).reshape(1, -1)
         
         distances, indices = self.index.search(query_vec, k + 1)
@@ -50,7 +51,7 @@ class ContentEngine:
         results = []
         for i in range(len(indices[0])):
             original_idx = indices[0][i]
-            if original_idx == idx: continue 
+            if original_idx == int(idx): continue 
             item = self.df.iloc[original_idx].to_dict()
             item['similarity_score'] = float(distances[0][i])
             results.append(item)
@@ -58,12 +59,15 @@ class ContentEngine:
         return pd.DataFrame(results)
 
     def search_by_text(self, query: str, k: int = 20):
-        # For text queries, we still need the model to encode the *query*
-        # But we load it strictly for this one operation, which is light on RAM
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(config.EMBEDDING_MODEL)
+        # --- OPTIMIZATION START ---
+        # Only load the model if it hasn't been loaded yet
+        if self.model is None:
+            print("Loading Embedding Model (One-time operation)...")
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(config.EMBEDDING_MODEL)
+        # --- OPTIMIZATION END ---
         
-        query_vec = model.encode([query])
+        query_vec = self.model.encode([query])
         faiss.normalize_L2(query_vec)
         
         distances, indices = self.index.search(query_vec, k)

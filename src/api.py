@@ -106,8 +106,7 @@ def get_user_by_email(email: str) -> Optional[dict]:
     return user
 
 # --- Endpoints ---
-
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
