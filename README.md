@@ -1,10 +1,4 @@
----
-title: ProfitGenAI
-sdk: docker
-app_port: 7860
----
-
-# ProfitGenAI: AI-Powered E-commerce Sales Agent
+# ProfitGenAI: AI-Powered E-commerce Sales Agent | [Live](https://huggingface.co/spaces/shub3Ed/ProfitGenAI)
 
 ## Overview
 
